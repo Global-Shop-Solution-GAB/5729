@@ -1,0 +1,192 @@
+Program.Sub.Preflight.Start
+Program.External.Include.Library("GCG_5708_GET_MATL_SEQ.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Author: Alejandro Anazco V.
+'10/21/2019
+'Programmed for Betts
+'Purpose: Transfer all material Parts related to an specific sequence of a job.
+'Uses: GCG_5708_GET_MATL_SEQ.lib - Renamed to GCG_XXXX_GET_MATL_SEQ.lib to match current Project.
+f.Intrinsic.Control.Try
+	'Calls the main Logic.
+'	v.Local.sSQL.Declare
+'	v.Local.sReturn.Declare
+'	f.ODBC.Connection!conx.opencompanyconnection
+'	f.Intrinsic.String.Build("Select USER_ID from WIRELESS_HDR where TRANS_ID = '{0}'",V.Passed.DATA-TRANSID,V.Local.sSQL)
+'	f.ODBC.Connection!conx.executeandreturn(v.Local.sSQL,v.Local.sReturn)
+'	F.Intrinsic.String.Trim(V.Local.sReturn,V.Local.sReturn)
+'	f.Intrinsic.Control.If(v.Local.sReturn.UCase,=,"TEST")
+'		Function.Intrinsic.Debug.InvokeDebugger
+'		Function.Intrinsic.Debug.Stop
+'	f.Intrinsic.Control.EndIf
+'	f.ODBC.Connection!conx.Close
+	f.Intrinsic.Control.CallSub(getWC)
+	
+	f.Intrinsic.Control.End
+f.Intrinsic.Control.Catch
+	f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+f.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.ErrorMsg.Start
+v.Local.sError.Declare
+v.Local.iHnd.Declare
+
+'Closes ODBC connection, default to connection : "con"
+f.Intrinsic.Control.If(v.ODBC!con.State, =, 1)
+	f.ODBC.Connection!con.Close
+f.Intrinsic.Control.EndIf
+
+'Generic Error message.
+f.Intrinsic.String.Build("Project GCG_5729_Bin_Trans.g2u {0}{0}Subroutine: {1}{0}Error: {2} with Description: {3}", v.Ambient.NewLine, v.Args.CurrentSub, v.Ambient.ErrorNumber, v.Ambient.ErrorDescription, v.Local.sError)
+f.Intrinsic.UI.InvokeWaitDialog(v.Local.sError)
+'f.Intrinsic.UI.Timer(10)
+f.Intrinsic.UI.CloseWaitDialog
+'f.Intrinsic.UI.Msgbox(v.Local.sError)
+Program.Sub.ErrorMsg.End
+
+Program.Sub.getWC.Start
+v.Local.sWoSuffSeq.Declare
+v.Local.sSQL.Declare
+v.Local.sWC.Declare
+v.Local.sPart.Declare
+v.Local.iQty_Pre_Format.Declare
+v.Local.sDefaultBin.Declare
+v.Local.sQty_Formated.Declare
+v.Local.iCnt.Declare
+V.Local.sTransID.Declare
+v.Local.sSaveTransID.Declare
+v.Local.iTempTransID.Declare
+
+v.Local.sWireLine.Declare
+v.Local.sWireHead.Declare
+
+v.Local.sUser.Declare
+
+v.Local.sJob.Declare
+v.Local.sSuffix.Declare
+v.Local.sSeq.Declare
+v.Local.sTemp.Declare
+
+v.Local.sDate_Last.Declare
+v.Local.sTime_Last.Declare
+
+f.Intrinsic.Control.Try
+'Try something
+	
+	V.Local.sTransID.Set(V.Passed.DATA-TRANSID)	
+	'Get Transaction ID
+	f.ODBC.Connection!con.OpenCompanyConnection
+		f.Intrinsic.String.Build("Select Field_2 from WIRELESS_LINE where TRANS_ID = '{0}'", v.Local.sTransID, v.Local.sSQL)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL, v.Local.sWoSuffSeq)
+		
+		f.Intrinsic.String.Build("Select USER_ID from WIRELESS_HDR where TRANS_ID = '{0}'", v.Local.sTransID, v.Local.sSQL)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL, v.Local.sUser)
+	f.ODBC.Connection!con.Close
+	
+	f.Intrinsic.String.Trim(v.Local.sWoSuffSeq, v.Local.sWoSuffSeq)
+	
+	f.Intrinsic.String.Replace(v.Local.sWoSuffSeq, "-", "", v.Local.sWoSuffSeq)
+	f.Intrinsic.String.Trim(v.Local.sWoSuffSeq, v.Local.sWoSuffSeq)
+	
+	f.Intrinsic.Control.If(v.Local.sWoSuffSeq.Length, <>, 15)
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.Control.If(v.Local.sWoSuffSeq, =, "")
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	'Get Work Center.
+	f.ODBC.Connection!con.OpenCompanyConnection
+		f.Intrinsic.String.Build("Select top 1 SAR from APSV3_UBDetail where SeqType = '1'and JSS = '{0}' order by BNO asc", v.Local.sWoSuffSeq, v.Local.sSQL)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL, v.Local.sWC)
+	f.ODBC.Connection!con.Close
+
+	f.Intrinsic.String.Trim(v.Local.sWC, v.Local.sWC)
+	
+	f.ODBC.Connection!con.OpenCompanyConnection
+		f.Intrinsic.String.Build("Select top 1 BIN from bin_master where Bin = '{0}'", v.Local.sWC, v.Local.sSQL)
+		f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL, v.Local.sWC)
+	f.ODBC.Connection!con.Close
+	
+	
+	f.Intrinsic.Control.If(v.Local.sWC.Trim, =, "")
+		f.ODBC.Connection!conX.OpenCommonConnection
+			f.Intrinsic.String.Build("Insert into MOBILE_CUSTOM_RESULT (cocode, txid, results) values ('{0}', '{1}', 'Transaction {1} has been unsuccessful. No To Bin Found.')", v.Caller.CompanyCode, v.Local.sTransID, v.Local.sSQL)
+			f.ODBC.Connection!conX.Execute(v.Local.sSQL)
+		f.ODBC.Connection!conX.Close
+		
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	
+	'v.Local.sWoSuffSeq.Set("000155001003000")
+	
+	'Get Job
+	f.Intrinsic.String.Left(v.Local.sWoSuffSeq, 6, v.Local.sJob)
+	'Get Suffix
+	f.Intrinsic.String.Right(v.Local.sWoSuffSeq, 9, v.Local.sTemp)
+	f.Intrinsic.String.Left(v.Local.sTemp, 3, v.Local.sSuffix)
+	'Get Seq
+	f.Intrinsic.String.Right(v.Local.sWoSuffSeq, 6, v.Local.sSeq)
+	
+	F.Intrinsic.Control.CallSub(GCG_5708_GET_MATL_SEQ,"Job",v.Local.sJob,"Suffix",v.Local.sSuffix,"Sequence",v.Local.sSeq)
+'	Function.Intrinsic.Debug.InvokeDebugger
+'	Function.Intrinsic.Debug.Stop	
+
+	f.Intrinsic.Control.For(v.Local.iCnt, 0, v.DataTable.GetMatlSeq.RowCount--, 1)
+		'get part and quantity
+		v.Local.sPart.Set(v.DataTable.GetMatlSeq(v.Local.iCnt).Part!FieldValTrim)
+		'v.Local.iQty_Pre_Format.Set(v.DataTable.GetMatlSeq(v.Local.iCnt).EST_QTY_PER!FieldVal)
+		
+		'Gets Default Bin for the part (From Bin)
+		f.ODBC.Connection!con.OpenCompanyConnection
+		 	f.Intrinsic.String.Build("Select Top 1 Bin from V_Inventory_Mstr where Part = '{0}'", v.Local.sPart, v.Local.sSQL)
+		 	f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL, v.Local.sDefaultBin)
+		 	
+		 	f.Intrinsic.String.Build("Select Hours_Estimated From JOB_OPERATIONS where JOB = '{0}' and Suffix = '{1}' and Part = '{3}'", v.Local.sJob, v.Local.sSuffix, v.Local.sSeq, v.Local.sPart, v.Local.sSQL)
+		 	f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL, v.Local.iQty_Pre_Format)
+		f.ODBC.Connection!con.Close
+				
+		'Format QTY
+		f.Intrinsic.Math.Mult(v.Local.iQty_Pre_Format, 10000, v.Local.iQty_Pre_Format)
+		v.Local.sQty_Formated.Set(v.Local.iQty_Pre_Format)
+
+		f.ODBC.Connection!con.OpenCompanyConnection
+		 	f.ODBC.Connection!con.ExecuteAndReturn("Select Top 1 TRANS_ID from WIRELESS_LINE order by TRANS_ID desc", v.Local.sSaveTransID)
+		 	v.Local.iTempTransID.Set(v.Local.sSaveTransID)
+		 	f.Intrinsic.Math.Add(v.Local.iTempTransID, 1, v.Local.iTempTransID)
+		 	f.Intrinsic.String.LPad(v.Local.iTempTransID, "0", 9, v.Local.sSaveTransID)
+		 	
+		 	
+'		 	f.Intrinsic.String.Build("Insert into  WIRELESS_LINE (TRANS_ID, SEQ, TRANS_TYPE, FIELD_1, FIELD_3, FIELD_4, FIELD_5, FIELD_9, FIELD_10, FIELD_12, ERROR_ID, PRINTED, DATE_LAST_CHG, TIME_LAST_CHG, LAST_CHG_BY) Values ('{0}', '000', 'O90', '{1}', '{2}', '{3}', '{4}', '000', '000', '0', '0', 'Y', '{5}', '{6}', 'GCG_5729')", v.Local.sSaveTransID, v.Local.sPart, v.Local.sQty_Formated, v.Local.sDefaultBin, v.Local.sWC, v.Ambient.Date, v.Ambient.Time, v.Local.sWireLine)
+'		 	
+'		 	f.ODBC.Connection!con.Execute(v.Local.sWireLine)
+'		 	
+'		 	f.Intrinsic.String.Build("Insert into  WIRELESS_HDR (TRANS_ID, TRANS_TYPE, SUCCESFUL_FLAG, ATTEMPTED_FLAG, ATTEMPTED_DATE, ATTEMPTED_TIME, USER_ID, BATCH, USE_LABEL_PRINTER, DATE_LAST_CHG, TIME_LAST_CHG, LAST_CHG_BY) Values ('{0}', 'O90', 'Y', 'Y', '{1}', '{2}', '{3}', '0', '0', '{1}', '{2}', 'GCG_5729')", v.Local.sSaveTransID, v.Ambient.Date, v.Ambient.Time, v.Local.sUser, v.Local.sWireHead)
+		 	
+		 	f.Intrinsic.String.Build("Insert into  WIRELESS_LINE (TRANS_ID, SEQ, TRANS_TYPE, FIELD_1, FIELD_3, FIELD_4, FIELD_5, FIELD_9, FIELD_10, FIELD_12, ERROR_ID, PRINTED, LAST_CHG_BY) Values ('{0}', '0000', 'O90', '{1}', '{2}', '{3}', '{4}', '000', '000', '0', '0', 'Y', 'GCG_5729')", v.Local.sSaveTransID, v.Local.sPart, v.Local.sQty_Formated, v.Local.sDefaultBin, v.Local.sWC, v.Local.sWireLine)
+		 	
+		 	f.ODBC.Connection!con.Execute(v.Local.sWireLine)
+		 	
+		 	f.Intrinsic.String.Build("Insert into  WIRELESS_HDR (TRANS_ID, TRANS_TYPE, SUCCESSFUL_FLAG, ATTEMPTED_FLAG, ATTEMPTED_DATE, ATTEMPTED_TIME, USER_ID, BATCH, USE_LABEL_PRINTER,  LAST_CHG_BY) Values ('{0}', 'O90', 'N', 'N', '00000000', '00000000', '{1}', '0', '0','GCG_5729')", v.Local.sSaveTransID, v.Local.sUser.Trim, v.Local.sWireHead)
+		 	
+		 	f.ODBC.Connection!con.Execute(v.Local.sWireHead)
+		f.ODBC.Connection!con.Close
+		
+	f.Intrinsic.Control.Next(v.Local.iCnt)
+
+	f.ODBC.Connection!conX.OpenCommonConnection
+		f.Intrinsic.String.Build("Insert into MOBILE_CUSTOM_RESULT (cocode, txid, results) values ('{0}', '{1}', 'Transaction {1} has been successful.')", v.Caller.CompanyCode, v.Local.sTransID, v.Local.sSQL)
+		f.ODBC.Connection!conX.Execute(v.Local.sSQL)
+	f.ODBC.Connection!conX.Close
+	
+f.Intrinsic.Control.Catch
+	f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+f.Intrinsic.Control.EndTry
+Program.Sub.getWC.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$aanazco$}$20191112122828295$}$7aQAV3Tor/tR9bkuakHbuzQlHVuXCGOzBGhIz7RzcT1blL9VoK7rG1v9dQIi+idH4xPEn0btliw=
+Program.Sub.Comments.End
